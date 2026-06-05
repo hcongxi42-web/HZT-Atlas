@@ -1,0 +1,126 @@
+/* ========================================
+   产业链图谱平台 — 全局补充样式
+   所有核心样式已迁移至 index.css (Design System v2)
+   此文件保留特定业务组件样式
+======================================== */
+
+/* 连线绘制中的临时线 */
+.drawing-line {
+  stroke: var(--fg-accent);
+  stroke-width: 2;
+  stroke-dasharray: 8, 4;
+  animation: flow-dash 0.5s linear infinite;
+}
+
+/* 搜索高亮 */
+.search-highlight {
+  background: rgba(56, 189, 248, 0.15);
+  border-radius: 2px;
+  padding: 0 2px;
+}
+
+/* 骨架屏 */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-surface) 25%,
+    var(--bg-overlay) 50%,
+    var(--bg-surface) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+}
+
+/* 数量徽章 */
+.count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 5px;
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: var(--radius-full);
+  background: var(--bg-overlay);
+  color: var(--fg-tertiary);
+}
+
+/* 层级徽章 */
+.tier-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.tier-badge--upstream {
+  background: rgba(52, 211, 153, 0.12);
+  color: var(--tier-upstream);
+}
+
+.tier-badge--midstream {
+  background: rgba(96, 165, 250, 0.12);
+  color: var(--tier-midstream);
+}
+
+.tier-badge--downstream {
+  background: rgba(251, 191, 36, 0.12);
+  color: var(--tier-downstream);
+}
+
+.tier-badge--general {
+  background: rgba(167, 139, 250, 0.12);
+  color: var(--tier-general);
+}
+
+/* 涨跌色 */
+.price-up {
+  color: #ef4444; /* A股红涨 */
+}
+
+.price-down {
+  color: #22c55e; /* A股绿跌 */
+}
+
+/* 迷你地图 */
+.minimap {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  width: 160px;
+  height: 100px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: var(--shadow-md);
+  z-index: 30;
+}
+
+.minimap-viewport {
+  position: absolute;
+  border: 1px solid var(--fg-accent);
+  background: rgba(56, 189, 248, 0.08);
+  border-radius: 2px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.minimap-viewport:hover {
+  background: rgba(56, 189, 248, 0.15);
+}
+
+.minimap-node {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 1px;
+  opacity: 0.5;
+}

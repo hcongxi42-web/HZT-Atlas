@@ -1,0 +1,3 @@
+cd app
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+npm run dev
