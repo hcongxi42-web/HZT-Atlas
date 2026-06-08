@@ -127,7 +127,7 @@ function savePositions(slug: string, parentId: number | null, positions: Map<num
 }
 
 // ---- Layout ----
-function layoutHierarchy(nodes: ChainNodeData[], width: number) {
+function layoutHierarchy(nodes: ChainNodeData[], connections: GraphConnection[], width: number) {
   if (nodes.length === 0) return;
   const groups: Record<string, ChainNodeData[]> = {};
   nodes.forEach(n => {
@@ -138,6 +138,8 @@ function layoutHierarchy(nodes: ChainNodeData[], width: number) {
   const levels = order.filter(l => groups[l]?.length > 0);
   const usable = Math.max(width - 240, 300);
   const startX = 120;
+
+  // 初始放置：等距排列
   levels.forEach((level, li) => {
     const g = groups[level];
     const spacing = usable / (g.length + 1);
@@ -146,6 +148,45 @@ function layoutHierarchy(nodes: ChainNodeData[], width: number) {
       n.y = TOP_PAD + li * LEVEL_GAP;
     });
   });
+
+  // Sugiyama 重心排序：重复 3 轮以最小化连线交叉
+  if (connections.length > 0 && levels.length >= 2) {
+    const nodeMap = new Map(nodes.map(n => [n.id, n]));
+    const neighbors = new Map<number, number[]>();
+    nodes.forEach(n => neighbors.set(n.id, []));
+    connections.forEach(c => {
+      neighbors.get(c.fromNodeId)?.push(c.toNodeId);
+      neighbors.get(c.toNodeId)?.push(c.fromNodeId);
+    });
+
+    const reorderLevel = (level: string, refNodes: ChainNodeData[]) => {
+      const g = groups[level];
+      if (!g || g.length <= 1) return;
+      const refSet = new Set(refNodes.map(n => n.id));
+      const barycenters = g.map(n => {
+        const conns = (neighbors.get(n.id) || []).filter(cid => refSet.has(cid));
+        if (conns.length === 0) return n.x + NODE_W / 2; // 无连接 → 保持原位
+        return conns.reduce((sum, cid) => sum + ((nodeMap.get(cid)?.x ?? 0) + NODE_W / 2), 0) / conns.length;
+      });
+      const indexed = g.map((n, i) => ({ n, b: barycenters[i] }));
+      indexed.sort((a, b) => a.b - b.b);
+      const spacing = usable / (g.length + 1);
+      indexed.forEach((item, i) => {
+        item.n.x = startX + spacing * (i + 1) - NODE_W / 2;
+      });
+    };
+
+    for (let iter = 0; iter < 3; iter++) {
+      // 正向 pass：用上一层的 X 坐标排序下一层
+      for (let li = 1; li < levels.length; li++) {
+        reorderLevel(levels[li], groups[levels[li - 1]]);
+      }
+      // 反向 pass：用下一层的 X 坐标排序上一层
+      for (let li = levels.length - 2; li >= 0; li--) {
+        reorderLevel(levels[li], groups[levels[li + 1]]);
+      }
+    }
+  }
 }
 
 // ---- Anchors ----
@@ -162,30 +203,52 @@ function getAnchors(nx: number, ny: number): Anchor[] {
   ];
 }
 
-function findBestAnchors(fx: number, fy: number, tx: number, ty: number): [Anchor, Anchor] {
-  const fa = getAnchors(fx, fy),
-    ta = getAnchors(tx, ty);
-  let best = Infinity,
-    pair: [Anchor, Anchor] = [fa[0], ta[0]];
-  for (const f of fa)
-    for (const t of ta) {
-      const d = (f.x - t.x) ** 2 + (f.y - t.y) ** 2;
-      if (d < best) {
-        best = d;
-        pair = [f, t];
-      }
+// 方向感知连线路由：下游走 bottom→top，上游走 top→bottom，同级走 left↔right
+// 这保证了同层对之间的连线平行出/入，不会再交叉缠绕
+const LEVEL_ORDER = ['upstream', 'midstream', 'downstream', 'general'];
+
+function routeEdge(
+  fx: number, fy: number, fromLevel: string,
+  tx: number, ty: number, toLevel: string
+): [Anchor, Anchor] {
+  const fcx = fx + NODE_W / 2, fcy = fy + NODE_H / 2;
+  const tcx = tx + NODE_W / 2, tcy = ty + NODE_H / 2;
+  const fromIdx = LEVEL_ORDER.indexOf(fromLevel);
+  const toIdx = LEVEL_ORDER.indexOf(toLevel);
+
+  if (fromIdx < toIdx) {
+    // 顺流：底部出 → 顶部入
+    return [
+      { x: fcx, y: fy + NODE_H, side: 'bottom' },
+      { x: tcx, y: ty, side: 'top' },
+    ];
+  } else if (fromIdx > toIdx) {
+    // 逆流：顶部出 → 底部入
+    return [
+      { x: fcx, y: fy, side: 'top' },
+      { x: tcx, y: ty + NODE_H, side: 'bottom' },
+    ];
+  } else {
+    // 同级：根据左右位置决定
+    if (fcx < tcx) {
+      return [
+        { x: fx + NODE_W, y: fcy, side: 'right' },
+        { x: tx, y: tcy, side: 'left' },
+      ];
+    } else {
+      return [
+        { x: fx, y: fcy, side: 'left' },
+        { x: tx + NODE_W, y: tcy, side: 'right' },
+      ];
     }
-  return pair;
+  }
 }
 
 function bezierPath(a1: Anchor, a2: Anchor): string {
-  const dx = Math.abs(a2.x - a1.x),
-    dy = Math.abs(a2.y - a1.y);
-  const off = Math.max(dx, dy) * 0.5 + 40;
-  let c1x = a1.x,
-    c1y = a1.y,
-    c2x = a2.x,
-    c2y = a2.y;
+  const dx = Math.abs(a2.x - a1.x), dy = Math.abs(a2.y - a1.y);
+  // 更克制的控制点偏移 → 更柔和的曲线，减少视觉噪声
+  const off = Math.min(Math.max(dx, dy) * 0.35 + 30, 100);
+  let c1x = a1.x, c1y = a1.y, c2x = a2.x, c2y = a2.y;
   if (a1.side === 'top') c1y -= off;
   else if (a1.side === 'bottom') c1y += off;
   else if (a1.side === 'left') c1x -= off;
@@ -218,6 +281,8 @@ export default function ChainGraph({
   const rafRef = useRef<number>(0);
   const needsRedrawRef = useRef(true);
   const prevKeyRef = useRef<string>('');
+  const scaleRef = useRef(transform.scale);
+  scaleRef.current = transform.scale;
 
   const {
     transform,
@@ -332,11 +397,11 @@ export default function ChainGraph({
       // 新节点布局
       const newNodes = nodes.filter(n => !cached.has(n.id));
       if (newNodes.length > 0) {
-        layoutHierarchy(newNodes, w);
+        layoutHierarchy(newNodes, connections, w);
         newNodes.forEach(n => positionsRef.current.set(n.id, { x: n.x, y: n.y }));
       }
     } else {
-      layoutHierarchy(nodes, w);
+      layoutHierarchy(nodes, connections, w);
       const map = new Map<number, { x: number; y: number }>();
       nodes.forEach(n => map.set(n.id, { x: n.x, y: n.y }));
       positionsRef.current = map;
@@ -392,7 +457,9 @@ export default function ChainGraph({
           const f = pos.get(conn.fromNodeId),
             t = pos.get(conn.toNodeId);
           if (!f || !t) return;
-          const [a1, a2] = findBestAnchors(f.x, f.y, t.x, t.y);
+          const fromNode = nodes.find(n => n.id === conn.fromNodeId);
+          const toNode = nodes.find(n => n.id === conn.toNodeId);
+          const [a1, a2] = routeEdge(f.x, f.y, fromNode?.level ?? 'general', t.x, t.y, toNode?.level ?? 'general');
           const path = bezierPath(a1, a2);
           const mx = (a1.x + a2.x) / 2,
             my = (a1.y + a2.y) / 2;
@@ -401,16 +468,22 @@ export default function ChainGraph({
           const isDimmed = selectedId !== null && !isRelated;
           const isCross = nodes.find(n => n.id === conn.fromNodeId)?.isCrossIndustry || nodes.find(n => n.id === conn.toNodeId)?.isCrossIndustry;
 
+          // LOD：根据缩放级别调整线宽和透明度
+          const s = scaleRef.current;
+          const lodScale = s < 0.4 ? 0.4 : s < 0.7 ? 0.7 : 1;
+          const baseStroke = isRelated ? 2 : 1.5;
+          const baseOpacity = isDimmed ? 0.15 : (isCross ? 0.6 : 1);
+
           const stroke = isRelated ? '#38bdf8' : (isCross ? '#a78bfa' : '#475569');
-          const strokeWidth = isRelated ? 2 : 1.5;
-          const opacity = isDimmed ? 0.15 : (isCross ? 0.6 : 1);
+          const strokeWidth = baseStroke * lodScale;
+          const opacity = (baseOpacity * (0.5 + lodScale * 0.5)).toFixed(2);
 
           // --- Hit area (wide transparent path for click interaction) ---
           const hitPath = svgPath({
             d: path,
             fill: 'none',
             stroke: 'rgba(0,0,0,0)',
-            'stroke-width': '14',
+            'stroke-width': String(Math.max(14 * lodScale, 6)),
             'data-conn-id': String(conn.id),
             'pointer-events': 'all',
             style: 'cursor: pointer',
@@ -436,8 +509,8 @@ export default function ChainGraph({
           }
           frag.appendChild(svgPath(visibleAttrs));
 
-          // --- Edge label ---
-          if (conn.label) {
+          // --- Edge label (hidden at low zoom to reduce clutter) ---
+          if (conn.label && s >= 0.5) {
             frag.appendChild(svgText(mx, my - 6, conn.label, {
               fill: isCross ? '#a78bfa' : '#64748b',
               'font-size': '9',
@@ -555,6 +628,15 @@ export default function ChainGraph({
     };
     const onUp = () => {
       if (dragRef.current && hasMoved.current) {
+        // 同步 positionsRef → node.x/y，防止 React re-render 时节点跳回旧位置
+        const pos = positionsRef.current.get(dragRef.current.nodeId);
+        if (pos) {
+          const draggedNode = nodesRef.current.find(n => n.id === dragRef.current!.nodeId);
+          if (draggedNode) {
+            draggedNode.x = pos.x;
+            draggedNode.y = pos.y;
+          }
+        }
         savePositions(cacheSlug, parentId, positionsRef.current);
         skipClick.current = true;
         setTimeout(() => {
