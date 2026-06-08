@@ -281,9 +281,6 @@ export default function ChainGraph({
   const rafRef = useRef<number>(0);
   const needsRedrawRef = useRef(true);
   const prevKeyRef = useRef<string>('');
-  const scaleRef = useRef(transform.scale);
-  scaleRef.current = transform.scale;
-
   const {
     transform,
     isPanning,
@@ -296,6 +293,9 @@ export default function ChainGraph({
     onPanEnd,
     screenToWorld,
   } = useCanvasTransform({ containerRef, minScale: 0.3, maxScale: 2, zoomStep: 0.12 });
+
+  const scaleRef = useRef(transform.scale);
+  scaleRef.current = transform.scale;
 
   // World bounds for minimap & fitView — must be declared before any hook that references it
   const worldBounds = useMemo(() => {
