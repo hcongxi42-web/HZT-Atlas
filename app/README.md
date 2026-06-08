@@ -1,73 +1,45 @@
-# React + TypeScript + Vite
+# 产业链图谱 — 应用代码
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+本目录是产业链图谱项目的应用代码，包含完整的前后端实现。
 
-Currently, two official plugins are available:
+## 启动
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+```bash
+# 安装依赖
+npm install
 
-## React Compiler
+# 配置环境变量
+cp .env.example .env
+# 编辑 .env 填写 DATABASE_URL 等信息
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+# 初始化数据库
+npm run db:push
 
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+# 启动开发服务器（端口 3000）
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## 目录结构
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
 ```
+app/
+├── api/              # Hono + tRPC 后端
+│   ├── routers/      # API 路由
+│   ├── lib/          # 工具函数
+│   └── boot.ts       # 入口
+├── db/               # Drizzle ORM 数据库层
+│   ├── schema.ts     # 表定义
+│   └── seed.ts       # 种子数据
+├── src/              # 前端源码
+│   ├── components/
+│   │   ├── chain/    # 产业链核心组件
+│   │   └── ui/       # shadcn/ui 组件库
+│   ├── hooks/        # 自定义 Hooks
+│   ├── data/         # 静态数据
+│   └── pages/        # 页面
+├── contracts/        # 类型定义
+├── scripts/          # 工具脚本
+└── package.json
+```
+
+详细项目介绍请查看[根目录 README](../README.md)。
