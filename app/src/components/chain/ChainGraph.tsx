@@ -32,6 +32,63 @@ const NODE_H = 70;
 const TOP_PAD = 120;
 const LEVEL_GAP = 160;
 
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+// ---- Safe SVG DOM helpers (replaces innerHTML string concatenation) ----
+
+/** Create an SVG element in the correct namespace */
+function svgEl(tag: string): SVGElement {
+  return document.createElementNS(SVG_NS, tag);
+}
+
+/** Set multiple attributes on an SVG element at once */
+function svgAttrs(el: SVGElement, attrs: Record<string, string>): void {
+  for (const [key, value] of Object.entries(attrs)) {
+    el.setAttribute(key, value);
+  }
+}
+
+/** Create an SVG <path> element with given attributes */
+function svgPath(attrs: Record<string, string>): SVGPathElement {
+  const el = svgEl('path') as SVGPathElement;
+  svgAttrs(el, attrs);
+  return el;
+}
+
+/** Create an SVG <text> element at (x, y) with safe text content */
+function svgText(x: number, y: number, text: string, attrs: Record<string, string> = {}): SVGTextElement {
+  const el = svgEl('text') as SVGTextElement;
+  svgAttrs(el, { x: String(x), y: String(y), ...attrs });
+  el.textContent = text; // Safe: textContent never parses HTML
+  return el;
+}
+
+/** Create an SVG <circle> element */
+function svgCircle(cx: number, cy: number, r: number, attrs: Record<string, string> = {}): SVGCircleElement {
+  const el = svgEl('circle') as SVGCircleElement;
+  svgAttrs(el, { cx: String(cx), cy: String(cy), r: String(r), ...attrs });
+  return el;
+}
+
+/** Build the shared <defs> fragment (arrowhead marker) — created once, cloned when needed */
+function buildDefs(): SVGDefsElement {
+  const defs = svgEl('defs') as SVGDefsElement;
+  const marker = svgEl('marker') as SVGMarkerElement;
+  svgAttrs(marker, {
+    id: 'arrowhead',
+    markerWidth: '6',
+    markerHeight: '4',
+    refX: '5',
+    refY: '2',
+    orient: 'auto',
+  });
+  const polygon = svgEl('polygon') as SVGPolygonElement;
+  svgAttrs(polygon, { points: '0 0, 6 2, 0 4', fill: '#475569' });
+  marker.appendChild(polygon);
+  defs.appendChild(marker);
+  return defs;
+}
+
 // ---- Cache ----
 function cacheKey(slug: string, parentId: number | null) {
   return `chain-pos-v2-${slug}-${parentId ?? 'root'}`;
@@ -294,8 +351,17 @@ export default function ChainGraph({
     needsRedrawRef.current = true;
   }, [nodes, cacheSlug, parentId]);
 
-  // RAF loop for SVG edges
+  // RAF loop for SVG edges — uses safe DOM API (no innerHTML)
   useEffect(() => {
+    // Force a redraw whenever deps change (selectedId / connections / nodes).
+    // Without this the dirty flag stays false from the previous loop and the new
+    // loop spins forever without drawing — edges go stale until a drag or zoom
+    // happens to flip the flag.
+    needsRedrawRef.current = true;
+
+    // Pre-build defs once; the draw loop clones it into the live SVG
+    const defsTemplate = buildDefs();
+
     const draw = () => {
       if (needsRedrawRef.current) {
         needsRedrawRef.current = false;
@@ -311,13 +377,16 @@ export default function ChainGraph({
           });
         }
 
-        let html = '';
-        // 流动动画定义
-        html += `<defs>
-          <marker id="arrowhead" markerWidth="6" markerHeight="4" refX="5" refY="2" orient="auto">
-            <polygon points="0 0, 6 2, 0 4" fill="#475569" />
-          </marker>
-        </defs>`;
+        // Clear previous content
+        while (svg.firstChild) {
+          svg.removeChild(svg.firstChild);
+        }
+
+        // Clone defs (arrowhead marker)
+        svg.appendChild(defsTemplate.cloneNode(true));
+
+        // Build a document fragment for batch insertion
+        const frag = document.createDocumentFragment();
 
         connections.forEach(conn => {
           const f = pos.get(conn.fromNodeId),
@@ -335,31 +404,68 @@ export default function ChainGraph({
           const stroke = isRelated ? '#38bdf8' : (isCross ? '#a78bfa' : '#475569');
           const strokeWidth = isRelated ? 2 : 1.5;
           const opacity = isDimmed ? 0.15 : (isCross ? 0.6 : 1);
-          const dash = isCross ? 'stroke-dasharray="6,4"' : (isRelated ? '' : 'stroke-dasharray="4,4"');
-          const glow = isRelated ? 'filter="drop-shadow(0 0 3px rgba(56,189,248,0.4))"' : '';
 
-          // 连接线点击区域（更宽的透明路径用于交互，必须设置 pointer-events="all" 否则透明 stroke 不接收事件）
-          html += `<path d="${path}" fill="none" stroke="rgba(0,0,0,0)" stroke-width="14" data-conn-id="${conn.id}" pointer-events="all" style="cursor: pointer" />`;
-          html += `<path d="${path}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}" ${dash} opacity="${opacity}" ${glow} style="pointer-events: none" />`;
+          // --- Hit area (wide transparent path for click interaction) ---
+          const hitPath = svgPath({
+            d: path,
+            fill: 'none',
+            stroke: 'rgba(0,0,0,0)',
+            'stroke-width': '14',
+            'data-conn-id': String(conn.id),
+            'pointer-events': 'all',
+            style: 'cursor: pointer',
+          });
+          frag.appendChild(hitPath);
 
+          // --- Visible edge path ---
+          const visibleAttrs: Record<string, string> = {
+            d: path,
+            fill: 'none',
+            stroke,
+            'stroke-width': String(strokeWidth),
+            opacity: String(opacity),
+            style: 'pointer-events: none',
+          };
+          if (isCross) {
+            visibleAttrs['stroke-dasharray'] = '6,4';
+          } else if (!isRelated) {
+            visibleAttrs['stroke-dasharray'] = '4,4';
+          }
+          if (isRelated) {
+            visibleAttrs['filter'] = 'drop-shadow(0 0 3px rgba(56,189,248,0.4))';
+          }
+          frag.appendChild(svgPath(visibleAttrs));
+
+          // --- Edge label ---
           if (conn.label) {
-            html += `<text x="${mx}" y="${my - 6}" fill="${isCross ? '#a78bfa' : '#64748b'}" font-size="9" text-anchor="middle" opacity="${opacity}">${conn.label}</text>`;
+            frag.appendChild(svgText(mx, my - 6, conn.label, {
+              fill: isCross ? '#a78bfa' : '#64748b',
+              'font-size': '9',
+              'text-anchor': 'middle',
+              opacity: String(opacity),
+            }));
           }
         });
 
-        // 绘制手动连线预览
+        // --- Drawing connection preview ---
         const dc = drawConnRef.current;
         if (dc) {
           const fromAnchor: Anchor = { x: dc.fromX, y: dc.fromY, side: dc.fromSide };
           const toAnchor: Anchor = { x: dc.toX, y: dc.toY, side: 'top' };
-          const path = bezierPath(fromAnchor, toAnchor);
-          html += `<path d="${path}" fill="none" stroke="#38bdf8" stroke-width="2" stroke-dasharray="6,4" opacity="0.8" />`;
-          html += `<circle cx="${dc.toX}" cy="${dc.toY}" r="5" fill="#38bdf8" opacity="0.6" />`;
-          // 绘制起点锚点高亮
-          html += `<circle cx="${dc.fromX}" cy="${dc.fromY}" r="5" fill="#38bdf8" opacity="0.8" />`;
+          const dcPath = bezierPath(fromAnchor, toAnchor);
+          frag.appendChild(svgPath({
+            d: dcPath,
+            fill: 'none',
+            stroke: '#38bdf8',
+            'stroke-width': '2',
+            'stroke-dasharray': '6,4',
+            opacity: '0.8',
+          }));
+          frag.appendChild(svgCircle(dc.toX, dc.toY, 5, { fill: '#38bdf8', opacity: '0.6' }));
+          frag.appendChild(svgCircle(dc.fromX, dc.fromY, 5, { fill: '#38bdf8', opacity: '0.8' }));
         }
 
-        svg.innerHTML = html;
+        svg.appendChild(frag);
       }
       rafRef.current = requestAnimationFrame(draw);
     };
@@ -585,6 +691,28 @@ export default function ChainGraph({
     return () => window.removeEventListener('click', h);
   }, []);
 
+  // Pre-compute the set of node IDs directly connected to the selected node.
+  // This avoids an O(N×M) scan in the JSX render loop (was: connections.some() per node).
+  const connectedNodeIds = useMemo(() => {
+    const set = new Set<number>();
+    if (selectedId === null) return set;
+    connections.forEach(c => {
+      if (c.fromNodeId === selectedId) set.add(c.toNodeId);
+      if (c.toNodeId === selectedId) set.add(c.fromNodeId);
+    });
+    return set;
+  }, [selectedId, connections]);
+
+  // Stable ref callback — same function identity across renders, avoids
+  // React's detach(null)→attach(el) cycle on every render.
+  const setNodeRef = useCallback((el: HTMLDivElement | null, nodeId: number) => {
+    if (el) {
+      nodeRefs.current.set(nodeId, el);
+    } else {
+      nodeRefs.current.delete(nodeId);
+    }
+  }, []);
+
   return (
     <div
       ref={containerRef}
@@ -625,13 +753,11 @@ export default function ChainGraph({
         {nodes.map(node => (
           <ChainNode
             key={node.id}
-            ref={el => {
-              if (el) nodeRefs.current.set(node.id, el);
-            }}
+            ref={(el: HTMLDivElement | null) => setNodeRef(el, node.id)}
             node={node}
             isSelected={selectedId === node.id}
             isHighlighted={false}
-            isDimmed={selectedId !== null && selectedId !== node.id && !connections.some(c => (c.fromNodeId === selectedId && c.toNodeId === node.id) || (c.toNodeId === selectedId && c.fromNodeId === node.id))}
+            isDimmed={selectedId !== null && selectedId !== node.id && !connectedNodeIds.has(node.id)}
             editMode={editMode}
             onSelect={onNodeClick}
             onDoubleClick={onNodeDoubleClick}

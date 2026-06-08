@@ -160,7 +160,7 @@
     border-radius: var(--radius-md);
     cursor: pointer;
     user-select: none;
-    transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease, filter 0.2s ease;
     text-align: left;
     z-index: 10;
     overflow: hidden;
@@ -209,12 +209,6 @@
     z-index: 100;
   }
 
-  .chain-node.dimmed {
-    opacity: 0.3;
-    filter: grayscale(0.6);
-    pointer-events: none;
-  }
-
   .chain-node.highlighted {
     animation: node-pulse 1.5s ease-in-out infinite;
   }
@@ -237,6 +231,15 @@
   }
   .chain-node.cross-industry:hover {
     opacity: 1;
+  }
+
+  /* 变暗状态（必须在 .cross-industry 之后，确保级联优先级覆盖跨产业节点的 opacity） */
+  .chain-node.dimmed {
+    opacity: 0.3;
+    filter: grayscale(0.85);
+    pointer-events: none;
+    border-style: solid;            /* 覆盖跨产业节点的 dashed 边框 */
+    background: var(--bg-surface);  /* 覆盖跨产业节点的渐变背景 */
   }
 
   /* 下钻指示器 */
