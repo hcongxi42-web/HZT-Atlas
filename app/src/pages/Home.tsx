@@ -6,6 +6,7 @@ import NodeDetail from '@/components/chain/NodeDetail';
 import { CommandPalette } from '@/components/chain/CommandPalette';
 import { Toolbar } from '@/components/chain/Toolbar';
 import { AddNodeModal } from '@/components/chain/AddNodeModal';
+import { IndustryOverview } from '@/components/chain/IndustryOverview';
 import { useIndustryData } from '@/hooks/use-industry-data';
 import { useSearchItems } from '@/hooks/use-search-items';
 import { useShortcuts, createCanvasShortcuts } from '@/hooks/use-shortcuts';
@@ -109,6 +110,15 @@ export default function Home() {
         editMode={editMode}
       />
       <Breadcrumb path={breadcrumbPath} onNavigate={breadcrumbNavigate} />
+
+      {/* 产业链概览 - 折叠式大白话解释 */}
+      <IndustryOverview data={{
+        name: industry.name,
+        icon: industry.icon,
+        overviewSummary: industry.overviewSummary,
+        overviewArchitecture: industry.overviewArchitecture,
+        overviewHighlights: industry.overviewHighlights,
+      }} />
 
       <div className="flex-1 flex overflow-hidden">
         <div className="flex-1 flex flex-col">

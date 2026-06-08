@@ -26,6 +26,12 @@ export interface IndustryData {
   icon: string;
   description: string;
   plainLanguageDescription?: string | null;
+  /** 产业链大白话概述：什么是这个产业、为什么重要 */
+  overviewSummary?: string;
+  /** 产业链架构说明：上游/中游/下游各管什么 */
+  overviewArchitecture?: string;
+  /** 产业链关键数据亮点 */
+  overviewHighlights?: string[];
   rootNodes: LocalNode[];
   childNodes: Record<number, LocalNode[]>;
   connections: LocalConnection[];
@@ -332,6 +338,21 @@ export const semiconductorData: IndustryData = {
   icon: "Cpu",
   description: "半导体产业链涵盖上游材料设备、中游设计制造封测、下游终端应用三大环节，是现代信息产业的基石。",
   plainLanguageDescription: "半导体就是芯片，从沙子（硅）变成手机/电脑/汽车里的'大脑'，要经过设计、制造、封装等几十道工序。没有它，现代电子设备全部停摆。",
+  overviewSummary: `半导体是现代电子世界的"大脑"和"记忆体"。从你口袋里的手机、桌上的电脑，到路上跑的电动车、云端跑的AI大模型——它们能工作，全靠指甲盖大小的芯片在背后运算。
+
+整个产业链的起点是沙子（硅），经过提纯拉晶、切割抛光变成硅片，再经过光刻、刻蚀等数百道工序，在硅片上"刻"出几十亿个晶体管，最后切割封装成一颗颗芯片。这个过程涉及的材料、设备、技术极其复杂，全球没有任何一个国家能独立完成全部环节——这就是为什么半导体被称为"工业皇冠上的明珠"。`,
+  overviewArchitecture: `本图谱按照"上游→中游→下游"三层架构组织：
+
+• 上游——材料和设备是"粮草"和"兵器"：EDA/IP核是设计芯片的软件工具；半导体设备（光刻机、刻蚀机等）是造芯片的"机床"；硅片、光刻胶、电子特气等材料是"原材料"；晶圆代工是把设计变成实物的核心制造环节
+• 中游——芯片本身按功能分五大类：逻辑芯片（CPU/GPU，负责"思考"）、存储芯片（DRAM/NAND，负责"记忆"）、模拟芯片（感知现实世界的声光温度）、功率半导体（控制电能）、光通信/CPO（用光传输数据）
+• 下游——封装测试给芯片穿上"铠甲"并检验质量，终端应用让芯片走进手机、汽车、AI服务器等所有电子设备，分销渠道负责把芯片送到全球客户手中`,
+  overviewHighlights: [
+    "全球半导体市场超 5,000 亿美元，中国是全球最大的芯片消费国",
+    "一颗先进芯片的制造过程涉及 300+ 道工序，耗时 3-4 个月",
+    "光刻机是全世界最精密的机器，ASML 的 EUV 光刻机单台售价超 2 亿美元",
+    "中国在封装测试环节全球领先，在设备、材料和 EDA 环节加速追赶",
+    "AI 大模型爆发推动算力芯片需求激增，数据中心成为半导体最大增长引擎",
+  ],
   rootNodes,
   childNodes,
   connections,
